@@ -1,0 +1,117 @@
+{
+   "$schema":"http://schema.management.azure.com/schemas/2014-04-01-preview/deploymentTemplate.json#",
+   "contentVersion":"1.0.0.0",
+   "parameters":{
+     "ASAName":{
+        "type":"string",
+        "metadata":{
+           "description":"Name of the ASA"
+        },
+        "defaultValue": "StreamAnalyticsPipelineDemo-ASA"
+     },
+     "ASAInputName":{
+        "type":"string",
+        "metadata":{
+           "description":"ASA input name, which will be referenced in the ASA Query"
+        },
+        "defaultValue": "tweetstream"
+     },
+     "ASAOutput2ADLSName":{
+        "type":"string",
+        "metadata":{
+           "description":"Name of the output that connects to ADLS, which will be referenced in the ASA Query"
+        },
+        "defaultValue": "2ADLS"
+     },
+     "adlStoreName":{
+        "type":"string",
+        "metadata":{
+           "description":"ADLS store account name"
+        },
+        "defaultValue": "adlstest01"
+     },
+     "ASAApiVersion":{
+        "type":"string",
+        "defaultValue":"2015-10-01",
+        "metadata":{
+           "description":"ApiVersion used by the template"
+        }
+     }
+   },
+   "variables":{
+      "location":"[resourceGroup().location]",
+   },
+   "resources":[
+     {
+       "apiVersion":"[parameters('ASAApiVersion')]",
+       "type":"Microsoft.StreamAnalytics/streamingjobs",
+       "name":"[parameters('ASAName')]",
+       "location":"[variables('location')]",
+        "properties":{
+           "sku":{
+              "name":"standard"
+           },
+           "eventsOutOfOrderPolicy":"drop",
+           "eventsOutOfOrderMaxDelayInSeconds":10,
+           "inputs":[
+              {
+                 "name":"[parameters('ASAInputName')]",
+                 "properties":{
+                    "type":"stream",
+                    "serialization":{
+                       "type":"JSON",
+                       "properties":{
+                          "encoding":"UTF8"
+                       }
+                    },
+                    "datasource":{
+                       "type":"Microsoft.ServiceBus/EventHub",
+                       "properties":{
+                          "serviceBusNamespace":"StreamAnalyticsPipelineDemo-NS",
+                          "sharedAccessPolicyName":"RootManageSharedAccessKey",
+                          "sharedAccessPolicyKey":"<enter your key here>",
+                          "eventHubName":"StreamAnalyticsPipelineDemo-EH"
+                       }
+                    }
+                 }
+              },
+           ],
+           "transformation":{
+              "name":"ProcessStream",
+              "properties":{
+                 "streamingUnits":1,
+                 "query":"
+                    SELECT * INTO [2adls] FROM tweetstream
+                    SELECT Topic,count(*) AS Count, Avg(SentimentScore) AS AvgSentiment, System.Timestamp AS Insert_Time
+                    INTO [2PowerBI]
+                    FROM tweetstream --TIMESTAMP BY CreatedAt
+                    GROUP BY TumblingWindow(second,5), Topic"
+              }
+           },
+           /* output to ADLS not supported yet in ARM
+           "outputs":[
+              {
+                 "name":"[parameters('ASAOutput2ADLSName')]",
+                 "properties":{
+                    "datasource":{
+                       "type":"Microsoft.DataLake/Accounts",
+                       "properties":{
+                         "accountName": "[parameters('adlStoreName')]",
+                         "defaultDataLakeStoreAccount": "[parameters('adlStoreName')]",
+                         "dataLakeStoreAccounts": [{
+                          "name": "[parameters('adlStoreName')]"
+                          }],
+                          "filePathPrefix":"logs/{date}/{time}",
+                          "dateFormat":"yyyy/MM/dd",
+                          "timeFormat":"HH",
+                        }
+                    }
+                 }
+              }
+           ] */
+        }
+     }
+   ],
+   "outputs":{
+   }
+}
